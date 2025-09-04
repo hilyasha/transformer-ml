@@ -36,12 +36,19 @@ def preprocess(text: str) -> str:
 @st.cache_resource
 def load_model_and_tokenizer():
     local_dir = snapshot_download(repo_id=REPO_ID)
-
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
-    model = TFAutoModelForSequenceClassification.from_pretrained(local_dir, from_pt=False)
-
+    
+    # Try TensorFlow first, fall back to PyTorch
+    try:
+        from transformers import TFAutoModelForSequenceClassification
+        model = TFAutoModelForSequenceClassification.from_pretrained(local_dir)
+        st.success("Loaded TensorFlow model")
+    except:
+        from transformers import AutoModelForSequenceClassification
+        model = AutoModelForSequenceClassification.from_pretrained(local_dir)
+        st.success("Loaded PyTorch model (TensorFlow not available)")
+    
     if getattr(model.config, "id2label", None):
-
         cfg_map = {int(k): v for k, v in model.config.id2label.items()}
         if set(cfg_map.keys()) == set(id2label.keys()):
             for k in id2label:
@@ -131,4 +138,5 @@ with tab2:
                 pred_ids, _ = predict_batch(tokenizer, model, df["text"].tolist(), MAX_LEN)
             subm = pd.DataFrame({"id": df["id"], "label": pred_ids})
             st.dataframe(subm.head())
+
             st.download_button("Download submission.csv", subm.to_csv(index=False), "submission.csv", "text/csv")
