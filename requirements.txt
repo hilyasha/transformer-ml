@@ -5,3 +5,4 @@ tensorflow
 huggingface-hub
 numpy
 pandas
+tf-keras
