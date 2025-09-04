@@ -1,10 +1,13 @@
+import os
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
+
 import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-import torch
+import tensorflow as tf
 from huggingface_hub import snapshot_download
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 REPO_ID = "hilyashfae/transformers"
 MAX_LEN = 100
@@ -38,12 +41,8 @@ def load_model_and_tokenizer():
     local_dir = snapshot_download(repo_id=REPO_ID)
 
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
-    
-    # Use from_tf=True to load TensorFlow weights as PyTorch model
-    model = AutoModelForSequenceClassification.from_pretrained(
-        local_dir, 
-        from_tf=True  # This is the key fix!
-    )
+    # Use TensorFlow model directly (no from_tf conversion needed)
+    model = TFAutoModelForSequenceClassification.from_pretrained(local_dir)
 
     if getattr(model.config, "id2label", None):
         cfg_map = {int(k): v for k, v in model.config.id2label.items()}
@@ -58,30 +57,24 @@ def encode_texts(tokenizer, texts, max_len):
         truncation=True,
         padding="max_length",
         max_length=max_len,
-        return_tensors="pt",
+        return_tensors="tf",  # Use TensorFlow tensors
     )
 
 def predict_single(tokenizer, model, text, max_len):
     x = preprocess(text)
     enc = encode_texts(tokenizer, [x], max_len)
-    
-    with torch.no_grad():
-        outputs = model(**enc)
-    
+    outputs = model(enc)
     logits = outputs.logits.numpy()[0]
-    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=0).numpy()
+    probs = tf.nn.softmax(logits).numpy()
     pred_id = int(np.argmax(probs))
     return pred_id, probs
 
 def predict_batch(tokenizer, model, texts, max_len):
     clean = [preprocess(t) for t in texts]
     enc = encode_texts(tokenizer, clean, max_len)
-    
-    with torch.no_grad():
-        outputs = model(**enc)
-    
+    outputs = model(enc)
     logits = outputs.logits.numpy()
-    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=1).numpy()
+    probs = tf.nn.softmax(logits, axis=1).numpy()
     pred_ids = probs.argmax(axis=1).astype(int)
     return pred_ids, probs
 
@@ -141,3 +134,4 @@ with tab2:
             subm = pd.DataFrame({"id": df["id"], "label": pred_ids})
             st.dataframe(subm.head())
             st.download_button("Download submission.csv", subm.to_csv(index=False), "submission.csv", "text/csv")
+
