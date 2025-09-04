@@ -1,8 +1,7 @@
 streamlit
+transformers
 torch
+tensorflow
 huggingface-hub
 numpy
 pandas
-protobuf
-sentencepiece
-
