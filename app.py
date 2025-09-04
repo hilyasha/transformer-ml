@@ -2,9 +2,9 @@ import time
 import numpy as np
 import pandas as pd
 import streamlit as st
-import tensorflow as tf
+import torch  
 from huggingface_hub import snapshot_download
-from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 REPO_ID = "hilyashfae/transformers"
 MAX_LEN = 100
@@ -36,18 +36,10 @@ def preprocess(text: str) -> str:
 @st.cache_resource
 def load_model_and_tokenizer():
     local_dir = snapshot_download(repo_id=REPO_ID)
+
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
-    
-    # Try TensorFlow first, fall back to PyTorch
-    try:
-        from transformers import TFAutoModelForSequenceClassification
-        model = TFAutoModelForSequenceClassification.from_pretrained(local_dir)
-        st.success("Loaded TensorFlow model")
-    except:
-        from transformers import AutoModelForSequenceClassification
-        model = AutoModelForSequenceClassification.from_pretrained(local_dir)
-        st.success("Loaded PyTorch model (TensorFlow not available)")
-    
+    model = AutoModelForSequenceClassification.from_pretrained(local_dir)
+
     if getattr(model.config, "id2label", None):
         cfg_map = {int(k): v for k, v in model.config.id2label.items()}
         if set(cfg_map.keys()) == set(id2label.keys()):
@@ -61,26 +53,34 @@ def encode_texts(tokenizer, texts, max_len):
         truncation=True,
         padding="max_length",
         max_length=max_len,
-        return_tensors="tf",
+        return_tensors="pt",
     )
 
 def predict_single(tokenizer, model, text, max_len):
     x = preprocess(text)
     enc = encode_texts(tokenizer, [x], max_len)
-    outputs = model(enc)
+    
+    with torch.no_grad():
+        outputs = model(**enc)
+    
     logits = outputs.logits.numpy()[0]
-    probs = tf.nn.softmax(logits).numpy()
+    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=0).numpy()  # Use torch softmax
     pred_id = int(np.argmax(probs))
     return pred_id, probs
 
 def predict_batch(tokenizer, model, texts, max_len):
     clean = [preprocess(t) for t in texts]
     enc = encode_texts(tokenizer, clean, max_len)
-    outputs = model(enc)
+    
+    with torch.no_grad():
+        outputs = model(**enc)
+    
     logits = outputs.logits.numpy()
-    probs = tf.nn.softmax(logits, axis=1).numpy()
+    probs = torch.nn.functional.softmax(torch.tensor(logits), dim=1).numpy()  # Use torch softmax
     pred_ids = probs.argmax(axis=1).astype(int)
     return pred_ids, probs
+
+
 
 
 st.title("Emotion Mining: Sentence-Based Emotion Prediction")
@@ -140,3 +140,4 @@ with tab2:
             st.dataframe(subm.head())
 
             st.download_button("Download submission.csv", subm.to_csv(index=False), "submission.csv", "text/csv")
+
