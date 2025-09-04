@@ -1,8 +1,8 @@
 streamlit
 transformers
 torch
-tensorflow
 huggingface-hub
 numpy
 pandas
-tf-keras
+protobuf
+sentencepiece
