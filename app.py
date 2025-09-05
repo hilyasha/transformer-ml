@@ -41,7 +41,7 @@ def load_model_and_tokenizer():
     local_dir = snapshot_download(repo_id=REPO_ID)
 
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
-    # Use TensorFlow model directly (no from_tf conversion needed)
+
     model = TFAutoModelForSequenceClassification.from_pretrained(local_dir)
 
     if getattr(model.config, "id2label", None):
@@ -57,7 +57,7 @@ def encode_texts(tokenizer, texts, max_len):
         truncation=True,
         padding="max_length",
         max_length=max_len,
-        return_tensors="tf",  # Use TensorFlow tensors
+        return_tensors="tf",
     )
 
 def predict_single(tokenizer, model, text, max_len):
@@ -134,4 +134,5 @@ with tab2:
             subm = pd.DataFrame({"id": df["id"], "label": pred_ids})
             st.dataframe(subm.head())
             st.download_button("Download submission.csv", subm.to_csv(index=False), "submission.csv", "text/csv")
+
 
